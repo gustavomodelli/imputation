@@ -1,0 +1,30 @@
+## Analyse time to death
+
+cox1 <- coxph(Surv(ttdeath, death) ~ age + trt + stage + grade, data = trial)
+summary(cox1)
+
+cox.zph(cox1)
+
+exploratory <- c('age','trt','stage','grade')
+dependent <- 'Surv(ttdeath, death)'
+
+trial %>% 
+  finalfit.coxph(dependent = dependent, explanatory = exploratory)
+
+trial %>% 
+  hr_plot(dependent, exploratory)
+
+
+## using 10 multiple imputarions
+res <- trial %>% 
+  mice(m = 10) %>% 
+  with(coxph(Surv(ttdeath, death) ~ age + trt + stage + grade)) %>% 
+  pool() %>% 
+  fit2df(exp = TRUE, estimate_name = "OR (multiple imputation)")
+
+trial %>% 
+  summary_factorlist(dependent, exploratory, fit_id = TRUE) -> fit1
+
+
+fit1 %>% 
+  ff_merge(res)
