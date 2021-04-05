@@ -1,0 +1,14 @@
+wcgs %>% 
+  missing_plot()
+
+data("nhanes2")
+nhanes2 %>% str()
+
+res <- mice(nhanes2, 5)
+data <- complete(res, action = 'all')
+
+imp <- mice(nhanes, seed = 123, print = FALSE) %>% 
+  with(lm(age ~ bmi)) %>% 
+  pool()
+
+fit2df(imp)
