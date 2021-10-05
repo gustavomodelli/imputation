@@ -1,0 +1,77 @@
+library(tidyverse)
+library(haven)
+library(finalfit)
+library(mice)
+library(lme4)
+library(survival)
+
+##Load
+covid <- haven::read_spss('COVID_multi.sav') %>% 
+  filter(`filter_$` == 1)
+
+##creat bin vars
+covid <- covid %>% 
+  mutate_at(vars('SexoMasc', 'ISS_Regime','CNI','MPAAZA','mTORi', 'ISSEsteroide', 'IECABRA', 'Negro',
+                 'PulsoSMDrecente','Timorecente', 'QuartisDiasDxDesdeCasoIndice'), ~ factor(.)) %>% 
+  mutate(TipoTx = case_when(
+    TipoTx == 1 ~ 'living donor',
+    TipoTx > 1 ~ 'deceased donor'
+  )) %>% 
+  mutate(
+    Numcomorbid = case_when(
+      Numcomorbid == 0 ~ 'none',
+      Numcomorbid >= 1 & Numcomorbid < 3 ~ '1 or 2',
+      Numcomorbid >=3 ~ 'more than 3'
+    )
+  ) %>% 
+  mutate(TFGbasalx10 = TFGbasal / 10)
+
+## Exploratory
+explo <- c('Idadex10', 'SexoMasc', 'Negro', 'TipoTx', 'IMC', 'TempoTxanos','Numcomorbid','ISSEsteroide', 'CNI','MPAAZA','mTORi', 
+           'PulsoSMDrecente','Timorecente', 'IECABRA' ,'TFGbasalx10','QuartisDiasDxDesdeCasoIndice')
+
+depe <- c('Obito28dias')
+
+explo_cox <- c('Idadex10', 'SexoMasc', 'Negro', 'TipoTx', 'IMC', 'TempoTxanos','Numcomorbid','ISSEsteroide', 'CNI','MPAAZA','mTORi', 
+               'PulsoSMDrecente','Timorecente', 'IECABRA' ,'TFGbasalx10','QuartisDiasDxDesdeCasoIndice', "frailty(Centro)")
+
+dep_cox <- c('Surv(POobito28dias, Obito28dias)')
+
+explo_multi <- c('Idadex10',  'TipoTx', 'Numcomorbid', 'mTORi', 
+                  'TFGbasalx10','QuartisDiasDxDesdeCasoIndice')
+
+explo_multi_cox <- c('Idadex10',  'TipoTx', 'Numcomorbid', 'mTORi', 
+                 'TFGbasalx10','QuartisDiasDxDesdeCasoIndice', "frailty(Centro)")
+
+
+
+
+## Logist Regression adjuste to center
+
+covid %>% 
+  finalfit.glm(dependent = depe, explanatory = explo, random_effect = 'Centro', explanatory_multi = explo_multi)
+
+
+## using cox
+covid %>% 
+  finalfit(dependent = dep_cox, explanatory = explo_cox,  explanatory_multi = explo_multi_cox)
+
+## Logist with multiple imputation by Mice (20 imputations)
+
+
+covid %>% 
+  select(explo, depe) %>% 
+  mice(m = 20) %>% 
+  with(glm(Obito28dias ~ Idadex10 + TipoTx + Numcomorbid + mTORi + TFGbasalx10 + QuartisDiasDxDesdeCasoIndice, family = 'binomial')) %>% 
+  pool() %>% 
+  fit2df(exp = TRUE, estimate_name = "OR (multiple imputation)")
+
+
+## Cox multiple imputations
+
+covid %>% 
+  select(explo, depe, POobito28dias) %>% 
+  mice(m = 20) %>% 
+  with(coxph(Surv(POobito28dias, Obito28dias) ~ Idadex10 + TipoTx + Numcomorbid + mTORi + TFGbasalx10 + QuartisDiasDxDesdeCasoIndice)) %>% 
+  pool() %>% 
+  fit2df(exp = TRUE, estimate_name = "HR (multiple imputation)")
